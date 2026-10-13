@@ -11,9 +11,10 @@ and follow-ups.
 
 ## Project Status
 
-**Stage 1 — project foundation.** The frontend, backend, database, and Docker
-Compose environment are set up, with a single `GET /api/health` endpoint.
-No CRM features (leads, discussions, follow-ups) exist yet.
+**Stage 2 — database schema.** The frontend, backend, database, and Docker
+Compose environment are set up, with a single `GET /api/health` endpoint. The
+`leads` and `discussions` tables exist as SQLAlchemy models and an Alembic
+migration. There are no CRM API endpoints or UI features yet.
 
 ## Architecture
 
@@ -41,9 +42,11 @@ Browser ──► Next.js client app ──► FastAPI (/api/*) ──► Postgr
 ```
 .
 ├── backend/             FastAPI app (uv project, uv.lock committed)
-│   ├── app/             config.py, db.py, main.py
+│   ├── app/             config.py, db.py, main.py, models.py
+│   ├── alembic/         migration environment and versions/
 │   └── tests/
 ├── frontend/            Next.js App Router app
+├── docker/postgres/     creates the leadflow_test database on first start
 ├── docker-compose.yml   db + backend + frontend for local development
 └── .env.example         configuration template
 ```
@@ -69,7 +72,8 @@ cp .env.example .env
 | ------------------------------------------------ | ----------------------------------------- |
 | `APP_TIMEZONE`                                   | Backend (default `Asia/Kolkata`; must be an exact, case-sensitive IANA name) |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Docker Compose PostgreSQL               |
-| `DATABASE_URL`                                   | Backend when run **on the host** (must use `postgresql+psycopg://`, validated at startup) |
+| `DATABASE_URL`                                   | Backend and Alembic when run **on the host** (must use `postgresql+psycopg://`, validated at startup) |
+| `TEST_DATABASE_URL`                              | Backend PostgreSQL tests only (database name must end in `_test`) |
 | `CORS_ORIGINS`                                   | Backend (comma-separated, at least one origin, no `*`) |
 | `NEXT_PUBLIC_API_URL`                            | Frontend (URL the browser uses for the API) |
 
@@ -142,6 +146,7 @@ Backend (from `backend/`; reads the root `.env` automatically):
 ```bash
 cd backend
 uv sync --locked
+uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
@@ -175,8 +180,55 @@ uv run ruff format --check .
 uv run pytest
 ```
 
-The pytest suite does not need a running database. It covers the 503 health
-response and settings validation.
+Most tests need the dedicated **`leadflow_test`** PostgreSQL database, set via
+`TEST_DATABASE_URL`. They drop and recreate its tables, so the fixture refuses
+any database whose name does not end in `_test`. They never use `DATABASE_URL`.
+
+- **New database volume:** `docker compose up -d db` creates `leadflow_test`
+  automatically via `docker/postgres/01-create-test-database.sql`.
+- **Volume created before this script existed:** Postgres runs init scripts
+  only on an empty volume, so create the database once. This adds an empty
+  database and does not touch existing data:
+
+  ```bash
+  docker compose exec db createdb -U leadflow leadflow_test
+  ```
+
+If `TEST_DATABASE_URL` is missing or PostgreSQL is not reachable, the database
+tests **fail** with an explanation; they are never silently skipped. The
+settings and 503 health tests run without a database.
+
+## Database Migrations
+
+The schema is managed by Alembic. Commands run from `backend/` and use
+`DATABASE_URL` (from your environment or the root `.env`), so with the Compose
+database they target `leadflow` on `localhost:5433`.
+
+```bash
+cd backend
+uv run alembic upgrade head
+```
+
+Inspect the state without changing anything:
+
+```bash
+uv run alembic current
+uv run alembic history
+uv run alembic check
+```
+
+`alembic check` reports whether the models and the database schema differ.
+
+> [!CAUTION]
+> Downgrading drops the `leads` and `discussions` tables and **all their
+> data**. Check which database `DATABASE_URL` points to before running it.
+
+```bash
+uv run alembic downgrade base
+```
+
+The backend container does not run migrations yet, so run
+`uv run alembic upgrade head` from the host after the database starts.
 
 ## Verify the Health Endpoint
 
@@ -213,8 +265,11 @@ docker compose down -v
 ## Current Limitations
 
 - No authentication or authorization (see the warning above).
-- No CRM features, database models, or migrations yet. Alembic is installed
-  but not initialised.
+- No CRM API endpoints or UI features yet; only the database schema exists.
+- Migrations are run from the host; the backend container does not apply them.
+- The "not blank" checks reject values made only of ASCII whitespace (spaces,
+  tabs, newlines). Other Unicode spaces, such as a non-breaking space, are
+  not treated as blank by PostgreSQL; the API will trim input before saving.
 - Docker images are for local development only.
 - **Known `npm audit` findings:** 9 high-severity entries, all from one
   advisory, [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)

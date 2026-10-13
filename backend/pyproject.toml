@@ -30,6 +30,10 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "SIM"]
 
+[tool.ruff.lint.isort]
+# The local alembic/ migrations directory is not the alembic package.
+known-third-party = ["alembic"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
