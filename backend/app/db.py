@@ -15,6 +15,9 @@ def build_engine(database_url: str) -> Engine:
         pool_pre_ping=True,
         pool_timeout=CONNECT_TIMEOUT_SECONDS,
         connect_args={"connect_timeout": CONNECT_TIMEOUT_SECONDS},
+        # Keep bound values (lead names, phone numbers, notes) out of exception
+        # text and therefore out of logged tracebacks; the SQL itself remains.
+        hide_parameters=True,
     )
 
 

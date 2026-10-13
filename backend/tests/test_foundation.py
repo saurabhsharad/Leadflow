@@ -17,7 +17,11 @@ def test_health_returns_503_without_leaking_details_when_database_is_down() -> N
         app.dependency_overrides.clear()
 
     assert response.status_code == 503
-    assert response.json() == {"status": "unavailable", "database": "unavailable"}
+    assert response.json() == {
+        "detail": "Database unavailable",
+        "code": "database_unavailable",
+        "errors": [],
+    }
     for secret in ("leak_user", "leak_password", "leak_db", "127.0.0.1"):
         assert secret not in response.text
 

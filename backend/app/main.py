@@ -10,12 +10,17 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
 from app.db import get_engine
+from app.errors import ErrorResponse, database_unavailable_response, register_error_handlers
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()  # Fails at startup on invalid config, e.g. a bad APP_TIMEZONE.
 
 app = FastAPI(title="LeadFlow API", version="0.1.0")
+
+# Error handling first: middleware added later wraps earlier middleware, so CORS
+# stays outermost and even 500 responses carry CORS headers.
+register_error_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,14 +31,14 @@ app.add_middleware(
 
 
 class HealthResponse(BaseModel):
-    status: Literal["ok", "unavailable"]
-    database: Literal["ok", "unavailable"]
+    status: Literal["ok"]
+    database: Literal["ok"]
 
 
 @app.get(
     "/api/health",
     response_model=HealthResponse,
-    responses={503: {"model": HealthResponse, "description": "Database unavailable"}},
+    responses={503: {"model": ErrorResponse, "description": "Database unavailable"}},
 )
 def health(engine: Annotated[Engine, Depends(get_engine)]) -> HealthResponse | JSONResponse:
     """Report whether the API is running and PostgreSQL answers `SELECT 1`."""
@@ -43,6 +48,5 @@ def health(engine: Annotated[Engine, Depends(get_engine)]) -> HealthResponse | J
     except SQLAlchemyError as exc:
         # Log only the exception type; the message can contain connection details.
         logger.warning("Health check database query failed: %s", type(exc).__name__)
-        body = HealthResponse(status="unavailable", database="unavailable")
-        return JSONResponse(status_code=503, content=body.model_dump())
+        return database_unavailable_response()
     return HealthResponse(status="ok", database="ok")

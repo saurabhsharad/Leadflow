@@ -239,10 +239,42 @@ curl -i http://localhost:8000/api/health
 | Situation                 | Status | Body                                               |
 | ------------------------- | ------ | -------------------------------------------------- |
 | API up, `SELECT 1` works  | `200`  | `{"status":"ok","database":"ok"}`                  |
-| Database unreachable      | `503`  | `{"status":"unavailable","database":"unavailable"}` |
+| Database unreachable      | `503`  | `{"detail":"Database unavailable","code":"database_unavailable","errors":[]}` |
 
 The database connection times out after 3 seconds, so the endpoint never
 hangs. Error details and connection strings are never returned.
+
+## API Errors
+
+Every non-2xx response uses one envelope:
+
+```json
+{"detail": "Validation failed", "code": "validation_error",
+ "errors": [{"field": "name", "message": "Name is required"}]}
+```
+
+| Status | `code`                 | When                                              |
+| ------ | ---------------------- | ------------------------------------------------- |
+| 404    | `not_found`            | Unknown route                                     |
+| 404    | `lead_not_found`       | A lead id that does not exist                     |
+| 405    | `method_not_allowed`   | Unsupported HTTP method (the `Allow` header is kept) |
+| 422    | `validation_error`     | Invalid request; `errors` lists each problem      |
+| 500    | `internal_error`       | Any unexpected error (details are logged server-side only) |
+| 503    | `database_unavailable` | No database connection could be obtained (see below), the connection dropped, or the pool timed out |
+
+`errors` is empty except for 422. Each item has a `field` (for example
+`name`, or `items.0.note` for nested values) and a `message`. `field` is
+`null` when the problem concerns the whole body, such as an empty update or
+malformed JSON.
+
+**503 also covers configuration problems.** Any failure to *establish* a
+database connection returns 503 `database_unavailable`, including a wrong
+password, an unknown database name, or a TLS error, not only a stopped server.
+The PostgreSQL driver reports all of these the same way, before any SQL runs.
+If the API returns 503 while PostgreSQL is running, check `DATABASE_URL`.
+Errors raised by an already-open connection (for example a constraint
+violation) return 500 `internal_error`, unless they are connection errors
+(SQLSTATE class `08`, or `57P01`–`57P03`).
 
 ## Stop Services
 
