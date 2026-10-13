@@ -1,0 +1,35 @@
+[project]
+name = "leadflow-backend"
+version = "0.1.0"
+description = "LeadFlow FastAPI backend"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "alembic>=1.20,<2",
+    "fastapi>=0.143,<1",
+    "psycopg[binary]>=3.3,<4",
+    "pydantic>=2.14,<3",
+    "pydantic-settings>=2.15,<3",
+    "sqlalchemy>=2.0.54,<2.1",
+    "tzdata>=2026.5",
+    "uvicorn[standard]>=0.54,<1",
+]
+
+[dependency-groups]
+dev = [
+    # Starlette 1.x's TestClient (re-exported as fastapi.testclient) uses httpx2;
+    # plain httpx is only a deprecated fallback.
+    "httpx2>=2.13,<3",
+    "pytest>=9.1,<10",
+    "ruff>=0.17,<0.18",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
