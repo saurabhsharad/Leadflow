@@ -76,6 +76,7 @@ cp .env.example .env
 | `TEST_DATABASE_URL`                              | Backend PostgreSQL tests only (database name must end in `_test`) |
 | `CORS_ORIGINS`                                   | Backend (comma-separated, at least one origin, no `*`) |
 | `NEXT_PUBLIC_API_URL`                            | Frontend (URL the browser uses for the API) |
+| `NEXT_PUBLIC_APP_TIMEZONE`                       | Frontend display timezone; set by Compose from `APP_TIMEZONE` |
 
 **Precedence.** The root `.env` supplies default values. Explicit environment
 variables always override it:
@@ -104,14 +105,17 @@ clash with a PostgreSQL already installed on your machine. `NEXT_PUBLIC_API_URL`
 is `http://localhost:8000` in both modes, because the browser always runs on
 the host. If you change the `POSTGRES_*` values, update `DATABASE_URL` to match.
 
-**Timezone.** `APP_TIMEZONE` is currently read and validated only by the
-backend; an unknown IANA name stops startup. The frontend does not receive it
-yet, so any date it rendered today would use the browser's local timezone.
-When date/time formatting is implemented, the frontend will get the timezone
-from the API at runtime, so that `APP_TIMEZONE` stays the single source of
-truth. There is deliberately no separate `NEXT_PUBLIC_APP_TIMEZONE`, because
-`NEXT_PUBLIC_*` values are baked into the browser bundle at build time and
-could drift from the backend setting.
+**Timezone.** `APP_TIMEZONE` decides what "today" means. The backend
+validates it at startup (an unknown IANA name stops it) and uses it to classify
+follow-ups. The frontend formats every date and time in the same timezone,
+never the browser's own, using `NEXT_PUBLIC_APP_TIMEZONE`:
+
+- Docker Compose sets `NEXT_PUBLIC_APP_TIMEZONE` from `APP_TIMEZONE`, so one
+  value configures both services.
+- For a frontend run on the host, set `NEXT_PUBLIC_APP_TIMEZONE` in
+  `frontend/.env.local` to match `APP_TIMEZONE`. It defaults to `Asia/Kolkata`.
+- Like every `NEXT_PUBLIC_*` value, it is baked into the browser bundle at build
+  time, so changing it means rebuilding the frontend.
 
 ## Run with Docker Compose
 

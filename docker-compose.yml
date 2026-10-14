@@ -47,6 +47,8 @@ services:
     environment:
       # The browser (on the host) calls the API, so this stays a host URL.
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      # The same APP_TIMEZONE as the backend, so both agree on "today".
+      NEXT_PUBLIC_APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
     ports:
       - "127.0.0.1:3000:3000"
     volumes:

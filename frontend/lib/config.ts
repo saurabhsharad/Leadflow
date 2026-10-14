@@ -19,3 +19,20 @@ export function getApiBaseUrl(): string {
   }
   throw new Error("NEXT_PUBLIC_API_URL is not set; it is required for production builds.");
 }
+
+const DEFAULT_APP_TIMEZONE = "Asia/Kolkata";
+
+/**
+ * IANA timezone used for "today", follow-up labels and every displayed time,
+ * independent of the browser's own timezone. It must equal the backend's
+ * APP_TIMEZONE; Docker Compose sets NEXT_PUBLIC_APP_TIMEZONE from that value.
+ */
+export function getAppTimezone(): string {
+  const configured = process.env.NEXT_PUBLIC_APP_TIMEZONE?.trim() || DEFAULT_APP_TIMEZONE;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: configured });
+  } catch {
+    throw new Error(`NEXT_PUBLIC_APP_TIMEZONE is not a valid IANA timezone: ${configured}`);
+  }
+  return configured;
+}
