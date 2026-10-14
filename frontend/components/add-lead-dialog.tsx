@@ -207,11 +207,15 @@ export function AddLeadDialog({ open, onOpenChange, onCreated }: AddLeadDialogPr
             >
               Cancel
             </Button>
+            {/* Focusable while disabled (aria-disabled, not the native attribute), so
+                focus stays here during the save instead of falling to <body>. Base UI
+                still blocks clicks, and with them implicit submission, meanwhile. */}
             <Button
               type="submit"
               disabled={submitting}
+              focusableWhenDisabled
               aria-busy={submitting}
-              className="bg-blue-600 text-white hover:bg-blue-700"
+              className="bg-blue-600 text-white hover:bg-blue-700 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-blue-600"
             >
               {submitting ? "Saving…" : "Save Lead"}
             </Button>
