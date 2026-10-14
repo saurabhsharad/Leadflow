@@ -1,0 +1,74 @@
+# LeadFlow local development stack. NOT a production configuration.
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# Variables are interpolated from the repository-root .env file (copy it from
+# .env.example). All published ports are bound to 127.0.0.1 only.
+
+# Fixed project name: keeps the existing "leadflow_postgres_data" volume (and
+# its data) regardless of the checkout's directory name. The production stack
+# in docker-compose.yml uses "leadflow-prod" and its own volume.
+name: leadflow
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+    ports:
+      # Host port 5433 avoids clashing with a PostgreSQL already installed on 5432.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Creates leadflow_test (for backend tests) when the volume is first initialised.
+      - ./docker/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    # Development override of the image's CMD: auto-reload on source changes.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    environment:
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # Inside the Compose network PostgreSQL is reached as "db" on port 5432,
+      # not localhost:5433 as from the host, so the URL is built here.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:?}
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      # The browser (on the host) calls the API, so this stays a host URL.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      # The same APP_TIMEZONE as the backend, so both agree on "today".
+      NEXT_PUBLIC_APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./frontend:/app
+      # Keep the image's node_modules and build cache instead of the host's.
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

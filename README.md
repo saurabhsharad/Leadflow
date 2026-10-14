@@ -47,7 +47,8 @@ Browser ──► Next.js client app ──► FastAPI (/api/*) ──► Postgr
 │   └── tests/
 ├── frontend/            Next.js App Router app
 ├── docker/postgres/     creates the leadflow_test database on first start
-├── docker-compose.yml   db + backend + frontend for local development
+├── docker-compose.yml       production-style stack (built images, demo data)
+├── docker-compose.dev.yml   development stack (live reload)
 └── .env.example         configuration template
 ```
 
@@ -99,7 +100,7 @@ note that its output includes the database password.
 | Backend runs…      | Connects to PostgreSQL at | Configured by                          |
 | ------------------ | ------------------------- | -------------------------------------- |
 | On the host        | `localhost:5433`          | `DATABASE_URL` in `.env`               |
-| In Docker Compose  | `db:5432`                 | Built from `POSTGRES_*` in `docker-compose.yml` |
+| In Docker Compose  | `db:5432`                 | Built from `POSTGRES_*` in the Compose files |
 
 Compose publishes PostgreSQL on host port **5433** (not 5432) so it does not
 clash with a PostgreSQL already installed on your machine. `NEXT_PUBLIC_API_URL`
@@ -120,30 +121,61 @@ never the browser's own, using `NEXT_PUBLIC_APP_TIMEZONE`:
 
 ## Run with Docker Compose
 
-```bash
-docker compose up --build
-```
+Two Compose files read the same root `.env`:
+
+| File | Stack | Project and database volume | Start it with |
+| ---- | ----- | --------------------------- | ------------- |
+| `docker-compose.yml` | Production-style demo: built images, migrations and demo data on start | `leadflow-prod`, `leadflow-prod_postgres_data` | `docker compose up --build` |
+| `docker-compose.dev.yml` | Development: `next dev`, Uvicorn `--reload`, source bind-mounted | `leadflow`, `leadflow_postgres_data` | `docker compose -f docker-compose.dev.yml up --build` |
 
 - Frontend: <http://localhost:3000>
 - API health: <http://localhost:8000/api/health>
 - API docs: <http://localhost:8000/docs>
 
-The backend waits for the PostgreSQL health check before starting. All ports
-are bound to `127.0.0.1` only.
+Each stack has its own database volume, so neither sees the other's data. Both
+use ports 3000 and 8000, so **run only one at a time**. All ports are bound to
+`127.0.0.1` only.
 
-**Development containers.** Both Dockerfiles build development images. The
-frontend image runs `next dev`. The backend image's default command runs
-Uvicorn without reload, and Compose overrides it with `--reload`. Source
-directories are bind-mounted for live changes. A production deployment would
-need different images (for example `next build` + `next start`) and is out of
-scope.
+**Production stack.** The backend waits for the PostgreSQL health check, then
+its start-up script (`backend/docker-entrypoint.sh`):
+
+1. applies migrations (`alembic upgrade head`);
+2. runs `python -m scripts.seed --auto` with `SEED_DEMO_DATA=true`, which inserts
+   the demo data only into an empty database (in practice, the first start) and
+   never resets or changes existing rows;
+3. starts Uvicorn.
+
+The frontend starts once `/api/health` reports healthy. It is a `next build`
+standalone server; `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_APP_TIMEZONE` (taken
+from `APP_TIMEZONE`) are **build arguments** baked into the bundle, so change
+them with `docker compose up --build`. Both application containers run as
+non-root users.
+
+**Production database port.** PostgreSQL is published on `127.0.0.1:5432` by
+default, matching the specification. If that port is already in use (for
+example by a PostgreSQL installed on your machine), the database container fails
+to start. Leave the other service as it is and choose another host port instead,
+by adding this line to your local `.env` before starting the stack:
+
+```bash
+POSTGRES_PROD_HOST_PORT=5434
+```
+
+This changes only the host side. The backend still connects to `db:5432` inside
+the Compose network, and the development stack's database stays on port `5433`.
+
+**Development stack.** `backend/Dockerfile.dev` and `frontend/Dockerfile.dev`
+build development images: the frontend runs `next dev`, and Compose runs the
+backend with `--reload`. Source directories are bind-mounted for live changes.
+This stack does not run migrations; apply them from the host (see Database
+Migrations). PostgreSQL is published on `127.0.0.1:5433`.
 
 ## Run Directly on the Host
 
 Start only PostgreSQL in Docker, then run the apps locally:
 
 ```bash
-docker compose up -d db
+docker compose -f docker-compose.dev.yml up -d db
 ```
 
 Backend (from `backend/`; reads the root `.env` automatically):
@@ -196,14 +228,14 @@ Most tests need the dedicated **`leadflow_test`** PostgreSQL database, set via
 `TEST_DATABASE_URL`. They drop and recreate its tables, so the fixture refuses
 any database whose name does not end in `_test`. They never use `DATABASE_URL`.
 
-- **New database volume:** `docker compose up -d db` creates `leadflow_test`
+- **New database volume:** `docker compose -f docker-compose.dev.yml up -d db` creates `leadflow_test`
   automatically via `docker/postgres/01-create-test-database.sql`.
 - **Volume created before this script existed:** Postgres runs init scripts
   only on an empty volume, so create the database once. This adds an empty
   database and does not touch existing data:
 
   ```bash
-  docker compose exec db createdb -U leadflow leadflow_test
+  docker compose -f docker-compose.dev.yml exec db createdb -U leadflow leadflow_test
   ```
 
 If `TEST_DATABASE_URL` is missing or PostgreSQL is not reachable, the database
@@ -239,8 +271,9 @@ uv run alembic check
 uv run alembic downgrade base
 ```
 
-The backend container does not run migrations yet, so run
-`uv run alembic upgrade head` from the host after the database starts.
+The development backend container does not run migrations, so run
+`uv run alembic upgrade head` from the host after the database starts. (The
+production stack's backend applies them at start-up.)
 
 ## Demo Data
 
@@ -325,19 +358,22 @@ violation) return 500 `internal_error`, unless they are connection errors
 ## Stop Services
 
 ```bash
-docker compose down
+docker compose down                              # production stack
+docker compose -f docker-compose.dev.yml down    # development stack
 ```
 
-This stops and removes the containers but **keeps** the database volume.
+This stops and removes that stack's containers but **keeps** its database volume.
 
 ## Reset Local Database Data
 
 > [!CAUTION]
-> The following command **permanently deletes all local LeadFlow database
-> data** stored in the `postgres_data` Docker volume. It cannot be undone.
+> The following command **permanently deletes all development database data**
+> stored in the `leadflow_postgres_data` Docker volume. It cannot be undone.
+> Without `-f docker-compose.dev.yml` it deletes the production stack's volume
+> (`leadflow-prod_postgres_data`) instead.
 
 ```bash
-docker compose down -v
+docker compose -f docker-compose.dev.yml down -v
 ```
 
 ## Current Limitations

@@ -1,7 +1,15 @@
-# LeadFlow local development stack. NOT a production configuration.
+# LeadFlow production-style stack: built images, migrations and demo data on start.
 #
-# Variables are interpolated from the repository-root .env file (copy it from
-# .env.example). All published ports are bound to 127.0.0.1 only.
+#   docker compose up --build
+#
+# For running on your own machine only: the API has no authentication, so every
+# port is bound to 127.0.0.1. Variables are interpolated from the repository-root
+# .env file (copy it from .env.example).
+#
+# It has its own project name and database volume, separate from the development
+# stack (docker-compose.dev.yml). Both use ports 3000 and 8000: run one at a time.
+
+name: leadflow-prod
 
 services:
   db:
@@ -11,8 +19,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
     ports:
-      # Host port 5433 avoids clashing with a PostgreSQL already installed on 5432.
-      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+      # Host port 5432 by default, as in the specification. If another PostgreSQL
+      # already uses it, set POSTGRES_PROD_HOST_PORT (e.g. 5434) in .env. The
+      # backend is unaffected: it always connects to db:5432 inside the network.
+      - "127.0.0.1:${POSTGRES_PROD_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Creates leadflow_test (for backend tests) when the volume is first initialised.
@@ -26,38 +36,56 @@ services:
 
   backend:
     build: ./backend
-    # Development override of the image's CMD: auto-reload on source changes.
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     environment:
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-      # Inside the Compose network PostgreSQL is reached as "db" on port 5432,
-      # not localhost:5433 as from the host, so the URL is built here.
+      # Inside the Compose network PostgreSQL is reached as "db" on port 5432.
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:?}
+      # Demo stack: insert the fictional demo leads on first start. Insert-only
+      # (scripts.seed --auto): skipped whenever leads or discussions already exist.
+      SEED_DEMO_DATA: "true"
     ports:
       - "127.0.0.1:8000:8000"
-    volumes:
-      - ./backend/app:/app/app
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      # 200 only when the API runs and PostgreSQL answers; urlopen raises on 503.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Migrations and the first seed run before Uvicorn starts listening.
+      start_period: 30s
 
   frontend:
-    build: ./frontend
-    environment:
-      # The browser (on the host) calls the API, so this stays a host URL.
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-      # The same APP_TIMEZONE as the backend, so both agree on "today".
-      NEXT_PUBLIC_APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
+    build:
+      context: ./frontend
+      args:
+        # Baked into the browser bundle at build time. The browser (on the host)
+        # calls the API, so this is a host URL, not the "backend" service name.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        # The same APP_TIMEZONE as the backend, so both agree on "today".
+        NEXT_PUBLIC_APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
     ports:
       - "127.0.0.1:3000:3000"
-    volumes:
-      - ./frontend:/app
-      # Keep the image's node_modules and build cache instead of the host's.
-      - /app/node_modules
-      - /app/.next
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 volumes:
   postgres_data:
