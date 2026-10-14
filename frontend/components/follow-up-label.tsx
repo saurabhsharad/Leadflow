@@ -2,12 +2,19 @@ import { AlarmClock, CalendarClock } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { formatAppDay, formatAppTime } from "@/lib/time";
-import type { LeadSummary } from "@/lib/types";
+import type { IsoDateTime, LeadSummary } from "@/lib/types";
 
 type FollowUpLead = Pick<
   LeadSummary,
   "next_follow_up_at" | "follow_up_due_today" | "follow_up_overdue"
 >;
+
+/** "Overdue · was due today at 2:00 PM": shared by the card chip and the dialog header. */
+export function overdueText(at: IsoDateTime, now: Date, tz: string): string {
+  const day = formatAppDay(at, now, tz);
+  const dayPhrase = ["Today", "Tomorrow", "Yesterday"].includes(day) ? day.toLowerCase() : day;
+  return `Overdue · was due ${dayPhrase} at ${formatAppTime(at, tz)}`;
+}
 
 /**
  * Follow-up chip (spec sections 5 and 6). Whether it is due today or overdue
@@ -20,12 +27,11 @@ export function FollowUpLabel({ lead, now, tz }: { lead: FollowUpLead; now: Date
 
   const time = formatAppTime(at, tz);
   const day = formatAppDay(at, now, tz);
-  const dayPhrase = ["Today", "Tomorrow", "Yesterday"].includes(day) ? day.toLowerCase() : day;
 
   let text: string;
   let tone: string;
   if (lead.follow_up_overdue) {
-    text = `Overdue · was due ${dayPhrase} at ${time}`;
+    text = overdueText(at, now, tz);
     tone = "bg-red-50 text-red-700 ring-red-600/25";
   } else if (lead.follow_up_due_today) {
     text = `Follow-up today at ${time}`;

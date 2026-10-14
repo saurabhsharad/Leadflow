@@ -7,6 +7,7 @@ import { AddLeadDialog } from "@/components/add-lead-dialog";
 import { LeadCardSkeleton } from "@/components/lead-card";
 import { LeadFilters } from "@/components/lead-filters";
 import { LeadSection } from "@/components/lead-section";
+import { LeadTimelineDialog } from "@/components/lead-timeline-dialog";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { ApiError, isAbortError, listLeads } from "@/lib/api";
@@ -59,6 +60,9 @@ export function LeadDashboard() {
   const [now, setNow] = useState<Date | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  // The id outlives `timelineOpen` until the close animation ends.
+  const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   // `id` changes on every announcement, so identical texts are still announced.
   const [announcement, setAnnouncement] = useState({ id: 0, text: "" });
 
@@ -120,6 +124,11 @@ export function LeadDashboard() {
     refreshLeads();
   }
 
+  function openTimeline(leadId: number) {
+    setSelectedLeadId(leadId);
+    setTimelineOpen(true);
+  }
+
   return (
     <>
       <SiteHeader
@@ -158,11 +167,30 @@ export function LeadDashboard() {
           {list === null || now === null ? (
             error === null ? <LoadingSections /> : null
           ) : (
-            <LeadGroups list={list} now={now} tz={tz} updating={updating} />
+            <LeadGroups
+              list={list}
+              now={now}
+              tz={tz}
+              updating={updating}
+              onOpenLead={openTimeline}
+            />
           )}
         </div>
       </main>
       <AddLeadDialog open={addOpen} onOpenChange={setAddOpen} onCreated={handleCreated} />
+      {now !== null ? (
+        <LeadTimelineDialog
+          leadId={selectedLeadId}
+          open={timelineOpen}
+          onOpenChange={setTimelineOpen}
+          onOpenChangeComplete={(isOpen) => {
+            if (!isOpen) setSelectedLeadId(null);
+          }}
+          onChanged={refreshLeads}
+          now={now}
+          tz={tz}
+        />
+      ) : null}
     </>
   );
 }
@@ -172,11 +200,13 @@ function LeadGroups({
   now,
   tz,
   updating,
+  onOpenLead,
 }: {
   list: LoadedList;
   now: Date;
   tz: string;
   updating: boolean;
+  onOpenLead: (leadId: number) => void;
 }) {
   const groups = groupLeads(list.leads);
   const filtered = list.status !== undefined || list.query !== "";
@@ -202,6 +232,7 @@ function LeadGroups({
           now={now}
           tz={tz}
           emptyMessage=""
+          onOpenLead={onOpenLead}
         />
       ) : null}
 
@@ -214,6 +245,7 @@ function LeadGroups({
         tz={tz}
         pinned
         emptyMessage={filtered ? "No follow-ups today match these filters" : "No follow-ups today"}
+        onOpenLead={onOpenLead}
       />
 
       <LeadSection
@@ -223,6 +255,7 @@ function LeadGroups({
         now={now}
         tz={tz}
         emptyMessage={allLeadsEmpty}
+        onOpenLead={onOpenLead}
       />
     </div>
   );

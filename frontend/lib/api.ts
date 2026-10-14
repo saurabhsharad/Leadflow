@@ -46,6 +46,17 @@ export function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
+/** A short, user-facing sentence for a failed request (spec section 10). */
+export function describeApiError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.code === "network_error") return "Server unavailable. Check your connection and try again.";
+    if (error.code === "database_unavailable") return "The server can't reach its database. Try again shortly.";
+    if (error.code === "lead_not_found") return "This lead no longer exists.";
+    return error.message;
+  }
+  return "Something went wrong. Please try again.";
+}
+
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH";
   query?: URLSearchParams;

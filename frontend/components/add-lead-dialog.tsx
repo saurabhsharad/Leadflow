@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, createLead } from "@/lib/api";
 import type { LeadSummary } from "@/lib/types";
+import { charCount } from "@/lib/utils";
 
 // Same rules as the backend's LeadCreate (backend/app/schemas.py). The backend
 // stays authoritative; these checks only give faster feedback.
@@ -29,10 +30,6 @@ type FieldErrors = Partial<Record<Field, string>>;
 
 const EMPTY: Values = { name: "", company: "", phone: "" };
 
-/** Characters as the backend counts them (code points), not UTF-16 units: "😀" is 1, not 2. */
-function charCount(value: string): number {
-  return [...value].length;
-}
 const FIELDS: Field[] = ["name", "company", "phone"];
 
 function validate(values: Values): FieldErrors {

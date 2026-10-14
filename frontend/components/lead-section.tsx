@@ -12,10 +12,21 @@ interface LeadSectionProps {
   tz: string;
   emptyMessage: string;
   pinned?: boolean;
+  onOpenLead: (leadId: number) => void;
 }
 
 /** One dashboard group: heading, cards in the API's order, or an empty message. */
-export function LeadSection({ id, title, icon, leads, now, tz, emptyMessage, pinned }: LeadSectionProps) {
+export function LeadSection({
+  id,
+  title,
+  icon,
+  leads,
+  now,
+  tz,
+  emptyMessage,
+  pinned,
+  onOpenLead,
+}: LeadSectionProps) {
   const headingId = `${id}-heading`;
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3">
@@ -31,7 +42,7 @@ export function LeadSection({ id, title, icon, leads, now, tz, emptyMessage, pin
         <ul className="flex flex-col gap-3">
           {leads.map((lead) => (
             <li key={lead.id}>
-              <LeadCard lead={lead} now={now} tz={tz} pinned={pinned} />
+              <LeadCard lead={lead} now={now} tz={tz} pinned={pinned} onOpen={onOpenLead} />
             </li>
           ))}
         </ul>
