@@ -17,7 +17,14 @@ from app.config import Settings, get_settings
 from app.db import get_db
 from app.errors import ErrorResponse
 from app.models import LeadStatus
-from app.schemas import LeadCreate, LeadDetail, LeadSummary, LeadUpdate
+from app.schemas import (
+    DiscussionCreate,
+    DiscussionCreated,
+    LeadCreate,
+    LeadDetail,
+    LeadSummary,
+    LeadUpdate,
+)
 from app.services import leads as services
 
 # leads.id is a PostgreSQL INTEGER; larger values would fail in the database
@@ -73,3 +80,16 @@ def update_lead(
 ) -> LeadSummary:
     """Change status and/or the follow-up; omitted fields stay as they are."""
     return services.update_lead(session, lead_id, data, now, settings.timezone)
+
+
+@router.post(
+    "/{lead_id}/discussions",
+    response_model=DiscussionCreated,
+    status_code=status.HTTP_201_CREATED,
+    responses=NOT_FOUND | VALIDATION_ERROR,
+)
+def add_discussion(
+    lead_id: LeadId, data: DiscussionCreate, session: DbSession, now: Now, settings: AppSettings
+) -> DiscussionCreated:
+    """Log a note; a given follow_up_at also becomes the lead's current follow-up."""
+    return services.add_discussion(session, lead_id, data, now, settings.timezone)
