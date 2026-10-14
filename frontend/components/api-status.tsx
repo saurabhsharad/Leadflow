@@ -3,24 +3,29 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { API_BASE_URL } from "@/lib/config";
+import { ApiError, getHealth, isAbortError } from "@/lib/api";
 
-type Status = "checking" | "ok" | "unavailable" | "unreachable";
+type Status = "checking" | "ok" | "database_unavailable" | "unreachable" | "error";
 
 const LABELS: Record<Status, string> = {
   checking: "Checking…",
   ok: "API and database are available",
-  unavailable: "API is running, but the database is unavailable",
+  database_unavailable: "API is running, but the database is unavailable",
   unreachable: "API is unreachable",
+  error: "API returned an unexpected error",
 };
 
-// Calls GET /api/health directly from the browser (no Next.js server hop).
-async function fetchHealth(): Promise<Status> {
+async function checkHealth(signal?: AbortSignal): Promise<Status> {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/health`, { cache: "no-store" });
-    return res.ok ? "ok" : "unavailable";
-  } catch {
-    return "unreachable";
+    await getHealth(signal);
+    return "ok";
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    if (error instanceof ApiError) {
+      if (error.code === "database_unavailable") return "database_unavailable";
+      if (error.code === "network_error") return "unreachable";
+    }
+    return "error";
   }
 }
 
@@ -28,31 +33,24 @@ export function ApiStatus() {
   const [status, setStatus] = useState<Status>("checking");
 
   useEffect(() => {
-    let ignore = false;
-    fetchHealth().then((result) => {
-      if (!ignore) setStatus(result);
+    const controller = new AbortController();
+    checkHealth(controller.signal).then(setStatus, () => {
+      // Aborted on unmount: nothing to update.
     });
-    return () => {
-      ignore = true;
-    };
+    return () => controller.abort();
   }, []);
 
   function recheck() {
     setStatus("checking");
-    fetchHealth().then(setStatus);
+    checkHealth().then(setStatus);
   }
 
   return (
-    <div className="flex items-center gap-3 text-sm">
+    <div className="flex flex-wrap items-center gap-3 text-sm">
       <span role="status" className="text-muted-foreground">
         {LABELS[status]}
       </span>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={recheck}
-        disabled={status === "checking"}
-      >
+      <Button variant="outline" size="sm" onClick={recheck} disabled={status === "checking"}>
         Check again
       </Button>
     </div>

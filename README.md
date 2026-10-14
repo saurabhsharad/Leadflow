@@ -158,9 +158,16 @@ npm ci
 npm run dev
 ```
 
-The frontend defaults to `http://localhost:8000` for the API. To point it
-elsewhere, set `NEXT_PUBLIC_API_URL` in `frontend/.env.local`, because Next.js
-does not read the root `.env`.
+The frontend reads the API location from `NEXT_PUBLIC_API_URL`, the URL the
+**browser** uses to reach FastAPI (for example `http://localhost:8000`). Set it
+in `frontend/.env.local` or the environment, because Next.js does not read the
+root `.env`.
+
+- `npm run dev` falls back to `http://localhost:8000` when it is unset.
+- `npm run build` has no fallback: the value is baked into the browser bundle at
+  build time, and API calls fail with a configuration error if it was unset.
+- It is public by design. Never put credentials or backend secrets in any
+  `NEXT_PUBLIC_*` variable.
 
 ## Checks
 
