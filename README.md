@@ -242,6 +242,29 @@ If `TEST_DATABASE_URL` is missing or PostgreSQL is not reachable, the database
 tests **fail** with an explanation; they are never silently skipped. The
 settings and 503 health tests run without a database.
 
+### End-to-end tests
+
+Playwright runs the specification's required browser flows: a note with a
+follow-up later today moves the lead into Today's follow-ups, and a status change
+survives a reload. They run against a separate Compose stack,
+`docker-compose.e2e.yml` (project `leadflow-e2e`). It has an in-memory database,
+no published database port, and ports 3001 and 8001, so it can run next to the
+production stack without touching its data.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+cd frontend
+npx playwright install chromium   # first run only
+npm run test:e2e
+cd ..
+docker compose -f docker-compose.yml -f docker-compose.e2e.yml down
+```
+
+Before the specs, the global setup refuses ports 3000 and 8000, checks that
+`leadflow-e2e` serves the API on 8001, and resets that stack's demo data
+(`scripts.seed --reset` inside its backend container). The E2E stack keeps no
+data after `down`.
+
 ## Database Migrations
 
 The schema is managed by Alembic. Commands run from `backend/` and use

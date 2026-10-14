@@ -4,3 +4,9 @@ out
 .env
 .env.*
 npm-debug.log*
+# End-to-end tests and their output: never part of the production image.
+e2e
+playwright.config.ts
+playwright-report
+test-results
+blob-report

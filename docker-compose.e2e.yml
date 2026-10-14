@@ -1,0 +1,39 @@
+# Isolated stack for the Playwright end-to-end tests: the production images and
+# docker-compose.yml, overridden to use their own project, an in-memory database
+# and other host ports, so they run next to the production stack without
+# touching its data.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+#   (cd frontend && npm run test:e2e)
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml down
+#
+# The database lives in tmpfs: every start begins empty (then migrated and seeded)
+# and nothing is kept after `down`.
+
+name: leadflow-e2e
+
+services:
+  db:
+    # Not published on the host: only the E2E backend reaches it, as db:5432.
+    ports: !reset []
+    volumes: !override
+      # Creates leadflow_test, as in the other stacks.
+      - ./docker/postgres:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  backend:
+    environment:
+      # Fixed, so the tests' "later today" matches the stack whatever .env says.
+      APP_TIMEZONE: Asia/Kolkata
+      CORS_ORIGINS: http://localhost:3001
+    ports: !override
+      - "127.0.0.1:8001:8000"
+
+  frontend:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8001
+        NEXT_PUBLIC_APP_TIMEZONE: Asia/Kolkata
+    ports: !override
+      - "127.0.0.1:3001:3000"
