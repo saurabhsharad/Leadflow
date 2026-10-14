@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.config import get_settings
 from app.db import get_engine
 from app.errors import ErrorResponse, database_unavailable_response, register_error_handlers
+from app.routers import leads
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
+
+app.include_router(leads.router)
 
 
 class HealthResponse(BaseModel):

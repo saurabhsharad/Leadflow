@@ -1,6 +1,10 @@
+from collections.abc import Iterator
 from functools import lru_cache
+from typing import Annotated
 
+from fastapi import Depends
 from sqlalchemy import Engine, create_engine
+from sqlalchemy.orm import Session
 
 from app.config import get_settings
 
@@ -24,3 +28,13 @@ def build_engine(database_url: str) -> Engine:
 @lru_cache
 def get_engine() -> Engine:
     return build_engine(get_settings().database_url)
+
+
+def get_db(engine: Annotated[Engine, Depends(get_engine)]) -> Iterator[Session]:
+    """One session per request, closed afterwards.
+
+    It never commits: services commit once per write. Closing the session
+    rolls back anything uncommitted, e.g. after an exception mid-request.
+    """
+    with Session(engine) as session:
+        yield session
