@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
-import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
 // globals.css (shadcn/ui theme) maps Tailwind's font-sans to --font-sans.
@@ -33,11 +32,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to content
         </a>
-        <SiteHeader />
-        {/* Content column: about 1,000 px on desktop, full width with padding on mobile. */}
-        <main id="content" className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
-          {children}
-        </main>
+        {/* Pages render the site header and the <main id="content"> landmark. */}
+        {children}
       </body>
     </html>
   );

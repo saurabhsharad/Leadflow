@@ -1,11 +1,13 @@
 "use client";
 
-import { AlertTriangle, Pin, RotateCw } from "lucide-react";
+import { AlertTriangle, Pin, Plus, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AddLeadDialog } from "@/components/add-lead-dialog";
 import { LeadCardSkeleton } from "@/components/lead-card";
 import { LeadFilters } from "@/components/lead-filters";
 import { LeadSection } from "@/components/lead-section";
+import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { ApiError, isAbortError, listLeads } from "@/lib/api";
 import { getAppTimezone } from "@/lib/config";
@@ -56,6 +58,9 @@ export function LeadDashboard() {
   const [error, setError] = useState<unknown>(null);
   const [now, setNow] = useState<Date | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  // `id` changes on every announcement, so identical texts are still announced.
+  const [announcement, setAnnouncement] = useState({ id: 0, text: "" });
 
   /** The single entry point for (re)loading: aborts any list request still in flight. */
   const refreshLeads = useCallback(() => {
@@ -109,29 +114,56 @@ export function LeadDashboard() {
   const current: Filters = { status, query };
   const updating = list !== null && !sameFilters(list, current);
 
+  function handleCreated(lead: LeadSummary) {
+    // Keep the active filters; the new lead shows up if it matches them.
+    setAnnouncement((previous) => ({ id: previous.id + 1, text: `Lead added: ${lead.name}` }));
+    refreshLeads();
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="sr-only">Lead dashboard</h1>
-
-      {configError ? <ErrorBanner message={configError} /> : null}
-
-      <LeadFilters
-        status={status}
-        onStatusChange={setStatus}
-        search={search}
-        onSearchChange={setSearch}
+    <>
+      <SiteHeader
+        actions={
+          <Button
+            onClick={() => setAddOpen(true)}
+            className="bg-blue-600 text-white hover:bg-blue-700"
+          >
+            <Plus aria-hidden="true" />
+            Add New Lead
+          </Button>
+        }
       />
+      {/* Content column: about 1,000 px on desktop, full width with padding on mobile. */}
+      <main id="content" className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+        <div className="flex flex-col gap-6">
+          <h1 className="sr-only">Lead dashboard</h1>
+          <p role="status" aria-live="polite" className="sr-only">
+            {/* A new key replaces the text node, which screen readers announce again. */}
+            <span key={announcement.id}>{announcement.text}</span>
+          </p>
 
-      {error !== null ? (
-        <ErrorBanner message={describeError(error)} onRetry={refreshLeads} />
-      ) : null}
+          {configError ? <ErrorBanner message={configError} /> : null}
 
-      {list === null || now === null ? (
-        error === null ? <LoadingSections /> : null
-      ) : (
-        <LeadGroups list={list} now={now} tz={tz} updating={updating} />
-      )}
-    </div>
+          <LeadFilters
+            status={status}
+            onStatusChange={setStatus}
+            search={search}
+            onSearchChange={setSearch}
+          />
+
+          {error !== null ? (
+            <ErrorBanner message={describeError(error)} onRetry={refreshLeads} />
+          ) : null}
+
+          {list === null || now === null ? (
+            error === null ? <LoadingSections /> : null
+          ) : (
+            <LeadGroups list={list} now={now} tz={tz} updating={updating} />
+          )}
+        </div>
+      </main>
+      <AddLeadDialog open={addOpen} onOpenChange={setAddOpen} onCreated={handleCreated} />
+    </>
   );
 }
 
