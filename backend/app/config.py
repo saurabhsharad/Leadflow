@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     app_timezone: str = "Asia/Kolkata"
     database_url: str
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
+    # Read only by `python -m scripts.seed --auto`: insert demo data into an empty
+    # database. The API itself never seeds.
+    seed_demo_data: bool = False
 
     @field_validator("database_url")
     @classmethod

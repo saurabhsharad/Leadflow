@@ -75,6 +75,7 @@ cp .env.example .env
 | `DATABASE_URL`                                   | Backend and Alembic when run **on the host** (must use `postgresql+psycopg://`, validated at startup) |
 | `TEST_DATABASE_URL`                              | Backend PostgreSQL tests only (database name must end in `_test`) |
 | `CORS_ORIGINS`                                   | Backend (comma-separated, at least one origin, no `*`) |
+| `SEED_DEMO_DATA`                                 | `python -m scripts.seed --auto` only (default `false`; see Demo Data) |
 | `NEXT_PUBLIC_API_URL`                            | Frontend (URL the browser uses for the API) |
 | `NEXT_PUBLIC_APP_TIMEZONE`                       | Frontend display timezone; set by Compose from `APP_TIMEZONE` |
 
@@ -240,6 +241,40 @@ uv run alembic downgrade base
 
 The backend container does not run migrations yet, so run
 `uv run alembic upgrade head` from the host after the database starts.
+
+## Demo Data
+
+`backend/scripts/seed.py` inserts eight fictional leads covering all six
+statuses and every follow-up state (later today, earlier today and overdue,
+overdue from yesterday, tomorrow, later, none), with times relative to now in
+`APP_TIMEZONE`. Run it from `backend/` after migrating:
+
+```bash
+uv run python -m scripts.seed
+```
+
+It inserts **only when the `leads` and `discussions` tables are both empty**;
+otherwise it changes nothing. `--auto` does the same, but only when
+`SEED_DEMO_DATA=true`.
+
+The demo times are relative to when they were inserted, so on a later day
+"today" no longer matches. To refresh them, reset the data:
+
+> [!CAUTION]
+> `--reset` **permanently deletes every lead and discussion** in the target
+> database before inserting the demo data. It requires `--yes`, the database's
+> name in `--confirm-database`, and `DATABASE_URL` exported in your shell (a
+> value only in `.env` is refused). The script prints the target host and
+> database (never credentials) before writing.
+>
+> **Before running it, check that `DATABASE_URL` points to the database whose
+> data you mean to replace**, not one holding data you want to keep. Replace
+> both `<demo-database>` placeholders below with that database's name.
+
+```bash
+export DATABASE_URL='postgresql+psycopg://<user>:<password>@<host>:<port>/<demo-database>'
+uv run python -m scripts.seed --reset --yes --confirm-database <demo-database>
+```
 
 ## Verify the Health Endpoint
 
