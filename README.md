@@ -14,6 +14,7 @@ of separate pages.
 
 ## Contents
 
+- [Demo video](#demo-video)
 - [Screenshots](#screenshots)
 - [Quick start](#quick-start)
 - [Features](#features)
@@ -33,6 +34,20 @@ of separate pages.
 - [Security and data safety](#security-and-data-safety)
 - [Known limitations](#known-limitations)
 - [Use of AI](#use-of-ai)
+
+## Demo video
+
+[Watch the 2:38 demo on YouTube](https://youtu.be/v1z5Kz3HN3U)
+
+A real recording of the application, made on the isolated end-to-end stack with
+its synthetic demo data. It covers:
+
+- the lead dashboard, search and status filtering;
+- a lead's discussion timeline, and saving a new discussion;
+- scheduling a follow-up, and seeing the lead appear in the correct dashboard
+  group;
+- a status change that persists after the page is reloaded;
+- a brief technical overview.
 
 ## Screenshots
 
@@ -685,6 +700,11 @@ the diff before the commit.
 - **Screenshots:** the nine images in `docs/screenshots/` show the real
   application. They were captured from the isolated end-to-end stack by a
   Playwright script written with AI assistance.
+- **Demo video:** the footage is a recording of the running application on the
+  isolated end-to-end stack, with its real interactions and API responses. The
+  Playwright script that drove and recorded it (including the visible pointer)
+  was written with AI assistance. So were the captions and the edit, assembled
+  with Hyperframes: highlights, zooms, held frames and the closing card.
 - **Process documents:** the plans, reviews and test reports behind each stage.
 
 **What the developer decided or approved**
@@ -778,6 +798,18 @@ the diff before the commit.
   running, so the README's default ports were not used.
   - It reused the existing database container and volume.
   - The development databases' row counts were identical before and after.
+- **Development stack from a fresh clone of commit `e977997`**, with all three
+  services in Docker under their own Compose project and a new database volume:
+  - the frontend and backend used their default ports, 3000 and 8000. The
+    database host port was set to 5435 with `POSTGRES_HOST_PORT`, because the
+    existing development database held 5433;
+  - migration `0001` was applied from the host. The health check, a browser
+    walkthrough (add a lead, notes with and without a follow-up, a status change
+    surviving a reload, clearing a follow-up) and all 460 backend tests, run
+    against that stack's own `leadflow_test`, passed;
+  - the production frontend and backend were stopped to free ports 3000 and
+    8000, then restarted. The production and development environments were
+    restored with their data unchanged.
 - **Data during these runs:** the production database stayed at 9 leads and 21
   discussions, no volumes were deleted or pruned, and the repository was not
   changed.
@@ -786,9 +818,4 @@ the diff before the commit.
 
 **Not yet verified or still outstanding:**
 
-- **The full development Compose stack from a fresh clone on its default
-  ports.** The complete stack in `docker-compose.dev.yml` was not tested this
-  way. In the clean-clone run only its database service ran in Docker, while
-  the backend and frontend ran directly on the host.
-- **The demo video.**
 - **The developer's personal review** of this AI-use disclosure.
