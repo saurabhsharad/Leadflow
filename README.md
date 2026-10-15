@@ -815,7 +815,3 @@ the diff before the commit.
   changed.
 - **Reviews:** the diff was checked before each commit. From the Add Lead dialog
   stage onward, every commit also followed a separate read-only review.
-
-**Not yet verified or still outstanding:**
-
-- **The developer's personal review** of this AI-use disclosure.
