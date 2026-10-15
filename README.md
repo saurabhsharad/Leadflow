@@ -7,9 +7,10 @@ of separate pages.
 > [!WARNING]
 > LeadFlow has **no authentication**. Anyone who can reach port 8000 can read
 > and modify every lead, including names and phone numbers. Run it only on your
-> own machine (every port is bound to `127.0.0.1`) and **never expose it to the
-> internet**. A real deployment would need authentication, per-user ownership of
-> leads, HTTPS, rate limiting and a reviewed CORS policy.
+> own machine (the Compose stacks bind their published ports to `127.0.0.1`) and
+> **never expose it to the internet**. A real deployment would need
+> authentication, per-user ownership of leads, HTTPS, rate limiting and a
+> reviewed CORS policy.
 
 ## Contents
 
@@ -308,6 +309,9 @@ Next.js does not read the root `.env`. `npm run dev` falls back to
 A production build (`npm run build`) has no fallback for the API URL. Never put
 secrets in any `NEXT_PUBLIC_*` variable: they are public by design.
 
+`npm run dev` listens on all network interfaces by default, whereas Uvicorn
+started as above listens on `127.0.0.1` (its default).
+
 ## Database migrations
 
 Alembic manages the schema (one migration, `0001`: the `leads` and
@@ -482,16 +486,22 @@ The specification's two required browser flows:
    status.
 
 They run against the isolated `leadflow-e2e` stack (in-memory database, ports
-3001 and 8001), so they never touch the production or development data:
+3001 and 8001), so they never touch the production or development data. They
+need Docker with the `docker` CLI and Compose v2: the global setup runs
+`docker compose` to find that stack and reset its demo data.
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
 cd frontend
-npx playwright install chromium     # first run only
+npm ci                              # installs the pinned @playwright/test (1.63.0)
+npx playwright install chromium     # first run only: the browser for that version
 npm run test:e2e
 cd ..
 docker compose -f docker-compose.yml -f docker-compose.e2e.yml down
 ```
+
+Run `npm ci` before `npx playwright`. Otherwise, on a fresh clone, `npx` would
+fetch whatever Playwright version is current instead of the pinned one.
 
 - **Global setup.** Before the specs it refuses ports 3000 and 8000 and checks
   that `leadflow-e2e` serves the API on 8001. It then resets that stack's demo
@@ -672,6 +682,9 @@ the diff before the commit.
   files and the container start-up script.
 - **Tests:** the backend pytest suite and the Playwright specs.
 - **Documentation:** this README.
+- **Screenshots:** the nine images in `docs/screenshots/` show the real
+  application. They were captured from the isolated end-to-end stack by a
+  Playwright script written with AI assistance.
 - **Process documents:** the plans, reviews and test reports behind each stage.
 
 **What the developer decided or approved**
@@ -739,14 +752,28 @@ the diff before the commit.
   - 39 API checks and a browser walkthrough.
 - **Playwright specs 2 and 3** passed in two consecutive runs against the
   isolated end-to-end stack. Production data was checked unchanged afterwards.
-- **Clean clone:** a fresh clone of commit `3523f3e` built both production images
-  from scratch (no cache, classic builder) and started the stack under its own
-  project and volume. The stack ran on other host ports, because production
-  was running.
-  - Migration and demo seeding succeeded: 8 leads and 18 discussions.
-  - The health check passed, and so did all 39 API smoke checks.
-  - The frontend's assets loaded, and a browser walkthrough of the dashboard and
-    timeline showed no console errors.
+- **Clean clone of commit `c6124d5`**, in a separate, empty Colima VM, cloned
+  inside the home directory, following the README's two setup paths:
+  - **Docker setup ([Quick start](#quick-start)):**
+    - both production images were built from scratch;
+    - migration `0001` was applied;
+    - the demo data was seeded (8 leads and 18 discussions), and `leadflow_test`
+      was created;
+    - the health check, frontend assets, CORS, the non-root users and a browser
+      walkthrough all passed.
+  - **Host setup ([Running on the host](#running-on-the-host)):**
+    - the development database ran in Docker;
+    - `uv sync --locked` and `npm ci` installed the dependencies, and the
+      migration was applied;
+    - the backend and frontend started, the API was healthy, and the empty
+      dashboard loaded without console errors.
+  - The original environment was unchanged afterwards (containers, volumes and
+    database row counts).
+  - An earlier clean clone (commit `3523f3e`) was made outside the home
+    directory. Under Colima's default mounts, its database initialisation bind
+    mount was empty, so `leadflow_test` was not created (see
+    [Prerequisites](#prerequisites)). The `c6124d5` run inside the home
+    directory resolved this.
 - **Development stack:** started on alternate host ports, since production was
   running, so the README's default ports were not used.
   - It reused the existing database container and volume.
@@ -759,11 +786,9 @@ the diff before the commit.
 
 **Not yet verified or still outstanding:**
 
-- **The development stack on its default host ports (3000/8000).** It was run
-  only on alternate ports, while production was running.
-- **A clean clone inside the home directory.** The clean clone tested was made
-  outside it, where under Colima's default mounts the PostgreSQL initialisation
-  bind mount was not loaded, so `leadflow_test` was not created (see
-  [Prerequisites](#prerequisites)).
+- **The full development Compose stack from a fresh clone on its default
+  ports.** The complete stack in `docker-compose.dev.yml` was not tested this
+  way. In the clean-clone run only its database service ran in Docker, while
+  the backend and frontend ran directly on the host.
 - **The demo video.**
 - **The developer's personal review** of this AI-use disclosure.
