@@ -165,7 +165,7 @@ with the `POSTGRES_*` values.
 | -------- | ------- | ----- |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Every Compose stack | The containerised backend builds its own `DATABASE_URL` for `db:5432` from these. |
 | `DATABASE_URL` | Backend and Alembic **on the host** | Must use `postgresql+psycopg://`; validated at start-up. |
-| `TEST_DATABASE_URL` | Backend tests only | The database name must end in `_test`. |
+| `TEST_DATABASE_URL` | Backend database tests only | The name must end in `_test`. The template points it at `leadflow_test` on the **development** server, and the tests wipe their target, so export a disposable target instead; see [Backend](#backend). |
 | `APP_TIMEZONE` | Backend; also the frontend's display timezone in Compose | Exact IANA name, default `Asia/Kolkata`. |
 | `CORS_ORIGINS` | Backend | Comma-separated; at least one; `*` is rejected. Default `http://localhost:3000`. |
 | `SEED_DEMO_DATA` | `python -m scripts.seed --auto` | Default `false`. The production Compose stack sets it to `true` itself. |
@@ -362,27 +362,77 @@ From `backend/`:
 ```bash
 uv run ruff check .
 uv run ruff format --check .
+uv run pytest                 # read the warning below first
+```
+
+- **Database-free tests:** the follow-up classification tests (fixed clocks,
+  the midnight boundary, UTC/IST date differences), the schema and settings
+  tests, and the seed script's plan tests. To run only the seed script's
+  database-free tests:
+  `uv run pytest tests/test_seed.py -k "not db"`.
+- **Database tests:** the API, service, model and migration tests, plus the seed
+  tests named `test_db_*`. They use only `TEST_DATABASE_URL`, never
+  `DATABASE_URL`. The fixture refuses a database whose name does not end in
+  `_test`. Without a reachable test database, these tests fail with an
+  explanation; they are never skipped silently.
+
+> [!CAUTION]
+> **The database tests destroy the data in their target database.** Once per
+> run, the fixture downgrades the schema to empty and upgrades it again. Before
+> each test it truncates `leads` and `discussions`, and the migration tests
+> also drop `alembic_version`.
+>
+> `TEST_DATABASE_URL` is read from your environment first, then from the root
+> `.env`. The template (`.env.example`) points it at `leadflow_test` on the
+> **development** PostgreSQL server (`localhost:5433`). So a plain
+> `uv run pytest` with that default **wipes the development `leadflow_test`
+> database.**
+>
+> - Before running database tests, **export `TEST_DATABASE_URL`** for a
+>   dedicated, disposable test database. Do not rely on the `.env` fallback.
+> - **Check the resolved target** before running pytest (see below).
+> - **Never use a production database.** Do not use the shared development
+>   `leadflow_test` if it holds data you need to keep.
+> - **A different database name is not proof of isolation.** Prefer a separate,
+>   disposable PostgreSQL instance with its own storage.
+
+**One way to get an isolated test database** (the approach used for the
+results under [Use of AI](#use-of-ai)): a throwaway PostgreSQL container whose
+data lives in memory, on its own port.
+
+```bash
+docker run -d --name leadflow-pytest-db \
+  -e POSTGRES_USER=pytest -e POSTGRES_PASSWORD='<choose-a-password>' \
+  -e POSTGRES_DB=leadflow_pytest_test \
+  --tmpfs /var/lib/postgresql/data -p 127.0.0.1:5436:5432 postgres:17-alpine
+
+cd backend
+export TEST_DATABASE_URL='postgresql+psycopg://pytest:<choose-a-password>@127.0.0.1:5436/leadflow_pytest_test'
+```
+
+Replace the password placeholder, make sure port 5436 is free, and wait until
+the server accepts connections. Then confirm what the tests will use before
+running them:
+
+```bash
+uv run python -c 'import sys; sys.path[:0] = [".", "tests"]; import conftest; from sqlalchemy.engine import make_url; u = make_url(conftest.TestDatabaseSettings().test_database_url); print(u.host, u.port, u.database)'
 uv run pytest
 ```
 
-- **Tier 1 tests** cover follow-up classification at fixed clocks, including the
-  midnight boundary and UTC/IST date differences. They need no database.
-- **API and service tests** run against the dedicated **`leadflow_test`**
-  PostgreSQL database (`TEST_DATABASE_URL`), never `DATABASE_URL`. The fixture
-  **drops and recreates its tables** and refuses any database whose name does
-  not end in `_test`. Without that database the tests fail with an explanation;
-  they are never skipped silently.
-- `leadflow_test` is created automatically when a Compose database volume is
-  first initialised (`docker/postgres/01-create-test-database.sql`). For an
-  older development volume, create it once; this does not touch existing data:
+The check should print `127.0.0.1 5436 leadflow_pytest_test`. Stop the
+container with `docker stop leadflow-pytest-db` when you are done; its data
+disappears with it.
 
-  ```bash
-  docker compose -f docker-compose.dev.yml exec db createdb -U leadflow leadflow_test
-  ```
+**`leadflow_test` in the Compose stacks.** Each Compose database volume gets an
+empty `leadflow_test` database when it is first initialised
+(`docker/postgres/01-create-test-database.sql`). It is a test target only for
+disposable setups whose database holds nothing to preserve. On a volume created
+before that script existed, you can add it once, without touching the other
+databases:
 
-- Seed tests whose names start with `test_db_` write to `leadflow_test`. To run
-  only the database-free seed tests:
-  `uv run pytest tests/test_seed.py -k "not db"`.
+```bash
+docker compose -f docker-compose.dev.yml exec db createdb -U leadflow leadflow_test
+```
 
 ### Frontend
 
@@ -507,7 +557,7 @@ Interactive documentation: <http://localhost:8000/docs>.
 | `/api/health` returns 503 while PostgreSQL runs | The connection cannot be established: check `DATABASE_URL`, or the `POSTGRES_*` values for Compose. |
 | A changed `NEXT_PUBLIC_*` value or timezone has no effect | They are baked in at build time. Rebuild with `docker compose up --build`. |
 | Demo data shows yesterday's "today" | Seeded times are relative to when they were inserted. Reset the demo data ([Demo data](#demo-data)). |
-| Backend tests fail with "TEST_DATABASE_URL is not set" or cannot connect | Set `TEST_DATABASE_URL` (see `.env.example`) and start the database. Create `leadflow_test` if the volume predates it. |
+| Backend tests fail with "TEST_DATABASE_URL is not set" or cannot connect | Export `TEST_DATABASE_URL` for a disposable test database and make sure it is running; see [Backend](#backend). Do not point it at production, or at a database holding data you need: the tests wipe their target. |
 | `npm run test:e2e` stops with "Refusing to run…" | It is pointed at port 3000 or 8000. Start the `leadflow-e2e` stack and use the default URLs (3001/8001). |
 | The seed script refuses with "run `alembic upgrade head` first" | That database is not migrated to the latest revision. Run `uv run alembic upgrade head` against it, then seed. |
 
@@ -619,12 +669,21 @@ the diff before the commit.
 
 - **Static checks:** ESLint, the TypeScript check and a production build for the
   frontend at each stage, and Ruff for the backend.
-- **Backend tests:** the pytest suite, against a dedicated PostgreSQL test
+- **Backend tests:** run against a throwaway PostgreSQL server, never a shared
   database.
-  - An earlier session reported that all 322 tests passed at the end of backend
-    development. That run has not been repeated since, and no saved test report
-    backs it up. The same 322 tests are collected today, plus the seed script's.
-  - The seed script's 130 database-free tests pass.
+  - The server ran on `127.0.0.1:5436`, with database `leadflow_pytest_test` and
+    its data in tmpfs (in memory).
+  - `TEST_DATABASE_URL` was exported for the test process only.
+  - Before testing, the resolved URL was checked, and the server's identity was
+    confirmed as that throwaway server, not the development or production one.
+  - Results:
+    - the 8 seed database tests (`pytest tests/test_seed.py -k "test_db_"`)
+      passed;
+    - the full suite passed: **460 tests**;
+    - `ruff check .` passed, and `ruff format --check .` found 29 files already
+      formatted.
+  - The production and development databases' row counts were unchanged
+    afterwards.
 - **Browser checks** of the dashboard and both dialogs:
   - The dashboard and the timeline dialog were checked against the real backend
     and a test database.
@@ -657,12 +716,13 @@ the diff before the commit.
 - **Reviews:** the diff was checked before each commit. From the Add Lead dialog
   stage onward, every commit also followed a separate read-only review.
 
-**Not yet verified:**
+**Not yet verified or still outstanding:**
 
-- the seed script's eight database tests (`test_db_*`);
-- a full backend test run since the seed script was added.
-
-The clean clone was made outside the home directory. Under Colima's default
-mounts, its `leadflow_test` init script was therefore not loaded (see
-[Prerequisites](#prerequisites)); a clone inside the home directory was not
-tested.
+- **The development stack on its default host ports (3000/8000).** It was run
+  only on alternate ports, while production was running.
+- **A clean clone inside the home directory.** The clean clone tested was made
+  outside it, where under Colima's default mounts the PostgreSQL initialisation
+  bind mount was not loaded, so `leadflow_test` was not created (see
+  [Prerequisites](#prerequisites)).
+- **Screenshots and the demo video.**
+- **The developer's personal review** of this AI-use disclosure.
