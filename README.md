@@ -33,6 +33,7 @@ of separate pages.
 - [Troubleshooting](#troubleshooting)
 - [Security and data safety](#security-and-data-safety)
 - [Known limitations](#known-limitations)
+- [Documentation](#documentation)
 - [Use of AI](#use-of-ai)
 
 ## Demo video
@@ -679,6 +680,12 @@ section 5):
   (`braces` ≤ 3.0.3, through `eslint-config-next` and the `shadcn` CLI).
   - They are development tooling only: `npm audit --omit=dev` reports 0.
   - No compatible patched release exists yet.
+
+## Documentation
+
+- [Software Requirements Specification](docs/SRS.md): functional and
+  non-functional requirements, architecture, data model, API, test coverage and
+  a requirements traceability matrix.
 
 ## Use of AI
 
