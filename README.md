@@ -133,6 +133,16 @@ Browser ──► Next.js client app (port 3000)
 
 - **Docker** with Compose v2 (Docker Desktop, or Colima on macOS). Neither
   BuildKit nor buildx is required.
+  - **With Colima's default configuration, keep the repository inside your home
+    directory.** By default Colima may share only your home directory with its
+    Docker VM. For a checkout elsewhere, bind mounts can appear empty inside the
+    containers:
+    - `docker/postgres/01-create-test-database.sql` is not loaded, so
+      `leadflow_test` is not created;
+    - the development stack's source mounts do not work either.
+
+    Colima setups that share that directory through custom mounts are not
+    affected.
 - To run or test outside Docker:
   - **Node.js 20.9+** (developed with Node 24) and npm
   - **Python 3.12**
@@ -629,12 +639,30 @@ the diff before the commit.
   - 39 API checks and a browser walkthrough.
 - **Playwright specs 2 and 3** passed in two consecutive runs against the
   isolated end-to-end stack. Production data was checked unchanged afterwards.
+- **Clean clone:** a fresh clone of commit `3523f3e` built both production images
+  from scratch (no cache, classic builder) and started the stack under its own
+  project and volume. The stack ran on other host ports, because production
+  was running.
+  - Migration and demo seeding succeeded: 8 leads and 18 discussions.
+  - The health check passed, and so did all 39 API smoke checks.
+  - The frontend's assets loaded, and a browser walkthrough of the dashboard and
+    timeline showed no console errors.
+- **Development stack:** started on alternate host ports, since production was
+  running, so the README's default ports were not used.
+  - It reused the existing database container and volume.
+  - The development databases' row counts were identical before and after.
+- **Data during these runs:** the production database stayed at 9 leads and 21
+  discussions, no volumes were deleted or pruned, and the repository was not
+  changed.
 - **Reviews:** the diff was checked before each commit. From the Add Lead dialog
   stage onward, every commit also followed a separate read-only review.
 
 **Not yet verified:**
 
 - the seed script's eight database tests (`test_db_*`);
-- a full backend test run since the seed script was added;
-- the development Compose stack, since it moved to `docker-compose.dev.yml`;
-- the whole stack started from a clean clone (so far only its images were built).
+- a full backend test run since the seed script was added.
+
+The clean clone was made outside the home directory. Under Colima's default
+mounts, its `leadflow_test` init script was therefore not loaded (see
+[Prerequisites](#prerequisites)); a clone inside the home directory was not
+tested.
