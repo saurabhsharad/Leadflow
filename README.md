@@ -13,6 +13,7 @@ of separate pages.
 
 ## Contents
 
+- [Screenshots](#screenshots)
 - [Quick start](#quick-start)
 - [Features](#features)
 - [Technology stack](#technology-stack)
@@ -31,6 +32,30 @@ of separate pages.
 - [Security and data safety](#security-and-data-safety)
 - [Known limitations](#known-limitations)
 - [Use of AI](#use-of-ai)
+
+## Screenshots
+
+![Dashboard with the Overdue from earlier days, Today's follow-ups and All leads groups](docs/screenshots/01-dashboard.png)
+
+*Dashboard: overdue follow-ups in red and labelled "Overdue", today's
+follow-ups pinned, all six status badges, and each lead's last note with how
+long ago it was written.*
+
+![Timeline dialog for one lead, with its notes newest first](docs/screenshots/05-timeline.png)
+
+*Timeline dialog: lead details, the status select, the next follow-up with
+Clear, notes newest first with the follow-up each one scheduled, and the
+"Lead created" entry at the bottom.*
+
+![Dashboard after a note with a follow-up later today](docs/screenshots/07-moved-to-today.png)
+
+*After a note with a follow-up later today is saved, the lead moves into
+Today's follow-ups straight away.*
+
+More screenshots in [`docs/screenshots/`](docs/screenshots/): filtering and
+search, Add Lead validation, a new lead, the follow-up form, a status change
+surviving a reload, and the mobile layout. They were captured from the isolated
+end-to-end stack with its demo data.
 
 ## Quick start
 
@@ -546,6 +571,22 @@ Interactive documentation: <http://localhost:8000/docs>.
   has one parser and can show field errors under inputs.
 - The assignment's "FastAI" was read as **FastAPI**.
 
+### Wireframes
+
+The three supplied wireframes (LandingPage, AddLead and EditLead) are the visual
+target. The UI follows them closely, with six documented deviations, needed to
+meet the brief or to cover states the wireframes don't show (specification,
+section 5):
+
+| # | Wireframe | Implementation | Reason |
+| - | --------- | -------------- | ------ |
+| 1 | Filters show only All, New, Contacted, Qualified, Proposal Sent | Adds Won and Lost; the row wraps on narrow screens | The brief requires filtering by all six statuses |
+| 2 | No search box | A compact search input on the right of the filter row | Bonus criterion |
+| 3 | No overdue state | A red chip "Overdue · was due today at 2:00 PM"; a pinned "Overdue from earlier days" group above Today, with the same header style; a filter-aware empty message in Today | Bonus criterion; urgent items must be visible |
+| 4 | The dialog header has no follow-up | A "Next follow-up: Today, 2:00 PM · Clear" line under the phone | Shows the state and gives Clear a home |
+| 5 | A "Lead created via web form" entry | A synthetic italic "Lead created" entry built from `lead.created_at`; never counted as the last note | The lead source isn't tracked; avoids a fake discussion row |
+| 6 | No loading, empty or error states | Skeleton cards, "No follow-ups today", inline error banners | The wireframes show only the happy path |
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |
@@ -724,5 +765,5 @@ the diff before the commit.
   outside it, where under Colima's default mounts the PostgreSQL initialisation
   bind mount was not loaded, so `leadflow_test` was not created (see
   [Prerequisites](#prerequisites)).
-- **Screenshots and the demo video.**
+- **The demo video.**
 - **The developer's personal review** of this AI-use disclosure.
